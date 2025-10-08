@@ -35,7 +35,7 @@ public static class MetadataLoader
                                 }
                                 catch (Exception e)
                                 {
-                                    CrowdControlMod.Instance.Logger.LogError(e);
+                                    CrowdControlMod.Instance.Logger.Error(e);
                                 }
                             }
                         }

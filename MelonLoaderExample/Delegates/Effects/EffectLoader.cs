@@ -28,11 +28,11 @@ public class EffectLoader
                     foreach (string id in attribute.IDs)
                     {
                         try { Effects[id] = (Effect)Activator.CreateInstance(type, mod, client); }
-                        catch (Exception e) { CrowdControlMod.Instance.Logger.LogError(e); }
+                        catch (Exception e) { CrowdControlMod.Instance.Logger.Error(e); }
                     }
                 }
             }
-            catch (Exception e) { CrowdControlMod.Instance.Logger.LogError(e); }
+            catch (Exception e) { CrowdControlMod.Instance.Logger.Error(e); }
         }
     }
 }

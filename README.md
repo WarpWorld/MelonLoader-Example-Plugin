@@ -1,9 +1,9 @@
-Example project for setting up a BepinEx plugin to connect a game to Crowd Control
+Example project for setting up a MelonLoader plugin to connect a game to Crowd Control
 
 Instructions:
 
 1) Update References  
-	Update BepinEx references to point to the BepinEx.dll from the downloaded version of BepinEx  
+	Update MelonLoader references to point to the MelonLoader.dll from the downloaded version of MelonLoader  
 	Add a reference to Assembly-CSharp from the game's data folders
 
 2) Create Effect Functions  

@@ -13,7 +13,7 @@ public static class TaskEx
     public static async void Forget(this Task task)
     {
         try { await task.ConfigureAwait(false); }
-        catch (Exception ex) { CrowdControlMod.Instance.Logger.LogError(ex); }
+        catch (Exception ex) { CrowdControlMod.Instance.Logger.Error(ex); }
     }
 
     /// <summary>
@@ -25,6 +25,6 @@ public static class TaskEx
     public static async void Forget(this Task task, bool silent)
     {
         try { await task.ConfigureAwait(false); }
-        catch (Exception ex) { if (!silent) CrowdControlMod.Instance.Logger.LogError(ex); }
+        catch (Exception ex) { if (!silent) CrowdControlMod.Instance.Logger.Error(ex); }
     }
 }

@@ -24,8 +24,8 @@ public partial class NetworkClient : IDisposable
     /// <remarks>This needs to be set in the pack CS file.</remarks>
     public static readonly int CV_PORT = 51337;
 
-    private TcpClient? m_client;
-    private DelimitedStreamReader? m_streamReader;
+    private TcpClient m_client;
+    private DelimitedStreamReader m_streamReader;
 
     private readonly CrowdControlMod m_mod;
 
@@ -77,13 +77,13 @@ public partial class NetworkClient : IDisposable
             if ((!IsCrowdControlSemaphorePresent()) &&
                 (!(PROCESS_LOOKUP_FALLBACK && IsCrowdControlProcessRunning())))
             {
-                CrowdControlMod.Instance.Logger.LogMessage("No CrowdControl process found, skipping connection attempt...");
+                CrowdControlMod.Instance.Logger.Error("No CrowdControl process found, skipping connection attempt...");
                 Thread.Sleep((TimeSpan)TIMEOUT_NO_PROCESS);
                 continue;
             }
 #pragma warning restore CS0162 // Unreachable code detected
             
-            CrowdControlMod.Instance.Logger.LogInfo("Attempting to connect to Crowd Control");
+            CrowdControlMod.Instance.Logger.Msg("Attempting to connect to Crowd Control");
 
             try
             {
@@ -94,12 +94,12 @@ public partial class NetworkClient : IDisposable
                     m_client.Connected)
                     ClientLoop();
                 else
-                    CrowdControlMod.Instance.Logger.LogInfo("Failed to connect to Crowd Control");
+                    CrowdControlMod.Instance.Logger.Error("Failed to connect to Crowd Control");
             }
             catch (Exception e)
             {
-                CrowdControlMod.Instance.Logger.LogError(e);
-                CrowdControlMod.Instance.Logger.LogError("Failed to connect to Crowd Control");
+                CrowdControlMod.Instance.Logger.Error(e);
+                CrowdControlMod.Instance.Logger.Error("Failed to connect to Crowd Control");
             }
             finally
             {
@@ -132,7 +132,7 @@ public partial class NetworkClient : IDisposable
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture; //do not remove this - kat
         
         m_streamReader = new(m_client!.GetStream());
-        CrowdControlMod.Instance.Logger.LogInfo("Connected to Crowd Control");
+        CrowdControlMod.Instance.Logger.Msg("Connected to Crowd Control");
 
         try
         {
@@ -144,12 +144,12 @@ public partial class NetworkClient : IDisposable
         }
         catch (EndOfStreamException)
         {
-            CrowdControlMod.Instance.Logger.LogInfo("Disconnected from Crowd Control");
+            CrowdControlMod.Instance.Logger.MsgPastel("Disconnected from Crowd Control");
             m_client?.Close();
         }
         catch (Exception e)
         {
-            CrowdControlMod.Instance.Logger.LogError(e);
+            CrowdControlMod.Instance.Logger.Error(e);
             m_client?.Close();
         }
     }
@@ -166,7 +166,7 @@ public partial class NetworkClient : IDisposable
         }
         catch (Exception ex)
         {
-            CrowdControlMod.Instance.Logger.LogError(ex);
+            CrowdControlMod.Instance.Logger.Error(ex);
         }
     }
     
@@ -194,7 +194,7 @@ public partial class NetworkClient : IDisposable
                 {
                     if (process.ProcessName.IndexOf("crowdcontrol", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        CrowdControlMod.Instance.Logger.LogMessage($"Found CrowdControl process: {process.ProcessName} (PID: {process.Id})");
+                        CrowdControlMod.Instance.Logger.Msg($"Found CrowdControl process: {process.ProcessName} (PID: {process.Id})");
                         return true;
                     }
                     accessibleProcesses++;
@@ -207,7 +207,7 @@ public partial class NetworkClient : IDisposable
                 catch (Exception ex)
                 {
                     // Other access issues
-                    CrowdControlMod.Instance.Logger.LogMessage($"Could not access process: {ex.Message}");
+                    CrowdControlMod.Instance.Logger.Msg($"Could not access process: {ex.Message}");
                     inaccessibleProcesses++;
                 }
             }
@@ -215,7 +215,7 @@ public partial class NetworkClient : IDisposable
             // If we have inaccessible processes, it's possible CrowdControl is running with different privileges
             if (inaccessibleProcesses > 0)
             {
-                CrowdControlMod.Instance.Logger.LogMessage($"Found {inaccessibleProcesses} inaccessible processes (possibly running with different privileges). Attempting connection anyway.");
+                CrowdControlMod.Instance.Logger.Msg($"Found {inaccessibleProcesses} inaccessible processes (possibly running with different privileges). Attempting connection anyway.");
                 // This handles the case where CrowdControl is running as admin but game is not
                 return true;
             }
@@ -224,7 +224,7 @@ public partial class NetworkClient : IDisposable
         }
         catch (Exception ex)
         {
-            CrowdControlMod.Instance.Logger.LogMessage($"Error checking for CrowdControl processes: {ex.Message}");
+            CrowdControlMod.Instance.Logger.Error($"Error checking for CrowdControl processes: {ex.Message}");
             // If we can't check processes at all, assume CrowdControl might be running and attempt connection
             return true;
         }
@@ -233,30 +233,30 @@ public partial class NetworkClient : IDisposable
     /// <summary>Sends a response message to the Crowd Control client.</summary>
     /// <param name="response">The response object to send.</param>
     /// <returns>True if the message was sent successfully, false otherwise.</returns>
-    public bool Send(SimpleJSONResponse? response)
+    public bool Send(SimpleJSONResponse response)
     {
         try
         {
             if (response == null) return false;
             if (!Connected) return false;
-            byte[] bytes = [.. Encoding.UTF8.GetBytes(response.Serialize()), 0];
+            byte[] bytes = Encoding.UTF8.GetBytes(response.Serialize()).Concat(new byte[] { 0 }).ToArray();
             m_client!.GetStream().Write(bytes, 0, bytes.Length);
             return true;
         }
         catch (Exception e)
         {
-            CrowdControlMod.Instance.Logger.LogError($"Error sending a message to the Crowd Control client: {e}");
+            CrowdControlMod.Instance.Logger.Error($"Error sending a message to the Crowd Control client: {e}");
             return false;
         }
     }
 
     /// <inheritdoc cref="Send"/>
     /// <summary>Asynchronously sends a response message to the Crowd Control client.</summary>
-    public Task<bool> SendAsync(SimpleJSONResponse? response) => Task.Run(() => Send(response));
+    public Task<bool> SendAsync(SimpleJSONResponse response) => Task.Run(() => Send(response));
     
     /// <summary>Closes the connection to the Crowd Control client.</summary>
     /// <param name="message">An optional reason message to send to the client prior to disconnection.</param>
-    public void Stop(string? message = null)
+    public void Stop(string message = null)
     {
         if (message != null)
         {
@@ -271,7 +271,7 @@ public partial class NetworkClient : IDisposable
 
     /// <inheritdoc cref="Stop"/>
     /// <summary>Asynchronously closes the connection to the Crowd Control client.</summary>
-    public Task StopAsync(string? message = null) => Task.Run(() => Stop(message));
+    public Task StopAsync(string message = null) => Task.Run(() => Stop(message));
 
     private static readonly EmptyResponse KEEPALIVE = new() { type = ResponseType.KeepAlive };
 

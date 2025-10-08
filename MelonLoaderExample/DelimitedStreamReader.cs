@@ -4,15 +4,26 @@ using System.Text;
 namespace CrowdControl;
 
 /// <summary>Reads data from a socket until a null terminator is encountered.</summary>
-/// <param name="stream">The network stream to read from.</param>
 /// <remarks>
 /// Many network stream parser implementations either don't properly handle multibyte UTF-8 characters or perform wasteful microallocations.
 /// This class avoids both problems and is recommended for use in production code when possible.
 /// </remarks>
 // ReSharper disable once ClassWithVirtualMembersNeverInherited.Global
-public class DelimitedStreamReader(NetworkStream stream) : IDisposable
+public class DelimitedStreamReader : IDisposable
 {
     private readonly MemoryStream _memory_stream = new();
+    private readonly NetworkStream m_stream;
+
+    /// <summary>Reads data from a socket until a null terminator is encountered.</summary>
+    /// <param name="stream">The network stream to read from.</param>
+    /// <remarks>
+    /// Many network stream parser implementations either don't properly handle multibyte UTF-8 characters or perform wasteful microallocations.
+    /// This class avoids both problems and is recommended for use in production code when possible.
+    /// </remarks>
+    public DelimitedStreamReader(NetworkStream stream)
+    {
+        m_stream = stream;
+    }
 
     ~DelimitedStreamReader() => Dispose(false);
 
@@ -32,7 +43,7 @@ public class DelimitedStreamReader(NetworkStream stream) : IDisposable
     {
         int byteRead;
 
-        while ((byteRead = stream.ReadByte()) != -1)
+        while ((byteRead = m_stream.ReadByte()) != -1)
         {
             if (byteRead == 0x00) // null terminator
                 break;

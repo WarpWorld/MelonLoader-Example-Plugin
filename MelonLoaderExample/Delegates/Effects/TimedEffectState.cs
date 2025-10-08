@@ -47,7 +47,7 @@ public class TimedEffectState
     /// <summary>Runs the timed thread and starts the execution of the effect.</summary>
     public IEnumerator Start()
     {
-        EffectResponse? response = null;
+        EffectResponse response = null;
         bool locked = false;
         try
         {
@@ -64,7 +64,7 @@ public class TimedEffectState
             catch (Exception e)
             {
                 response = EffectResponse.Failure(Request.id, StandardErrors.ExceptionThrown);
-                CrowdControlMod.Instance.Logger.LogError(e.Message);
+                CrowdControlMod.Instance.Logger.Error(e.Message);
                 State = EffectState.Errored;
             }
         }
@@ -81,7 +81,7 @@ public class TimedEffectState
     /// <summary>Pauses the current timed effect.</summary>
     public IEnumerator Pause()
     {
-        EffectResponse? response = null;
+        EffectResponse response = null;
         bool locked = false;
         try
         {
@@ -97,7 +97,7 @@ public class TimedEffectState
             catch (Exception e)
             {
                 response = EffectResponse.Failure(Request.id, StandardErrors.ExceptionThrown);
-                CrowdControlMod.Instance.Logger.LogError(e.Message);
+                CrowdControlMod.Instance.Logger.Error(e.Message);
                 State = EffectState.Errored;
             }
         }
@@ -114,7 +114,7 @@ public class TimedEffectState
     /// <summary>Unpauses the current timed effect.</summary>
     public IEnumerator Resume()
     {
-        EffectResponse? response = null;
+        EffectResponse response = null;
         bool locked = false;
         try
         {
@@ -130,7 +130,7 @@ public class TimedEffectState
             catch (Exception e)
             {
                 response = EffectResponse.Failure(Request.id, StandardErrors.ExceptionThrown);
-                CrowdControlMod.Instance.Logger.LogError(e.Message);
+                CrowdControlMod.Instance.Logger.Error(e.Message);
                 State = EffectState.Errored;
             }
         }
@@ -148,7 +148,7 @@ public class TimedEffectState
     /// <remarks>This should not be called unless the effect terminates prematurely.</remarks>
     public IEnumerator Stop()
     {
-        EffectResponse? response = null;
+        EffectResponse response = null;
         bool locked = false;
         try
         {
@@ -164,7 +164,7 @@ public class TimedEffectState
             catch (Exception e)
             {
                 response = EffectResponse.Failure(Request.id, StandardErrors.ExceptionThrown);
-                CrowdControlMod.Instance.Logger.LogError(e.Message);
+                CrowdControlMod.Instance.Logger.Error(e.Message);
                 State = EffectState.Errored;
             }
         }
@@ -183,7 +183,7 @@ public class TimedEffectState
     /// <summary>Advances the time of the current timed effect and executes the effect.</summary>
     public IEnumerator Tick()
     {
-        EffectResponse? response = null;
+        EffectResponse response = null;
         bool locked = false;
         try
         {
@@ -193,9 +193,9 @@ public class TimedEffectState
 
             switch (State)
             {
-                case EffectState.Running when !CrowdControlMod.Instance.GameStateManager.IsReady():
+                case EffectState.Running when !CrowdControlMod.Instance.GameStateManager.IsReady(Request.code):
                     return Pause();
-                case EffectState.Paused when !CrowdControlMod.Instance.GameStateManager.IsReady():
+                case EffectState.Paused when CrowdControlMod.Instance.GameStateManager.IsReady(Request.code):
                     return Resume();
                 case EffectState.Running:
                 {
@@ -216,7 +216,7 @@ public class TimedEffectState
                     catch (Exception e)
                     {
                         response = EffectResponse.Failure(Request.id, StandardErrors.ExceptionThrown);
-                        CrowdControlMod.Instance.Logger.LogError(e.Message);
+                        CrowdControlMod.Instance.Logger.Error(e.Message);
                         State = EffectState.Errored;
                     }
                     break;

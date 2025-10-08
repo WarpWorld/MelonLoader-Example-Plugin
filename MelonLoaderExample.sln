@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34701.34
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BepinExExample", "BepinExExample\BepinExExample.csproj", "{2C0D0AF8-7CA7-4B1E-BCA2-4DEDB337C4E6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MelonLoaderExample", "MelonLoaderExample\MelonLoaderExample.csproj", "{2C0D0AF8-7CA7-4B1E-BCA2-4DEDB337C4E6}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConnectorLib.JSON", "ConnectorLib.JSON\ConnectorLib.JSON.csproj", "{F0379E82-27D0-4C30-8356-29D08A978199}"
 EndProject

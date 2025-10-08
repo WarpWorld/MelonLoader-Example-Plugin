@@ -28,17 +28,17 @@ public abstract class Effect
 
     /// <inheritdoc cref="Start"/>
     /// <summary>Performs an update tick for a timed effect.</summary>
-    public virtual EffectResponse? Tick(EffectRequest request) => null;
+    public virtual EffectResponse Tick(EffectRequest request) => null;
 
     /// <inheritdoc cref="Start"/>
     /// <summary>Pauses a timed effect.</summary>
-    public virtual EffectResponse? Pause(EffectRequest request) => EffectResponse.Paused(request.ID);
+    public virtual EffectResponse Pause(EffectRequest request) => EffectResponse.Paused(request.ID);
 
     /// <inheritdoc cref="Start"/>
     /// <summary>Resumes a paused timed effect.</summary>
-    public virtual EffectResponse? Resume(EffectRequest request) => EffectResponse.Resumed(request.ID);
+    public virtual EffectResponse Resume(EffectRequest request) => EffectResponse.Resumed(request.ID);
 
     /// <inheritdoc cref="Start"/>
     /// <summary>Stops a running timed effect.</summary>
-    public virtual EffectResponse? Stop(EffectRequest request) => EffectResponse.Finished(request.ID);
+    public virtual EffectResponse Stop(EffectRequest request) => EffectResponse.Finished(request.ID);
 }

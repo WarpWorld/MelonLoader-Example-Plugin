@@ -1,27 +1,30 @@
-﻿using BepInEx;
-using BepInEx.Logging;
+﻿using CrowdControl;
 using CrowdControl.Delegates.Effects;
+using MelonLoader;
 using UnityEngine;
+
+[assembly: MelonGame("Ved", "Megabonk")]
+[assembly: MelonInfo(typeof(CrowdControlMod), CrowdControlMod.MOD_NAME, "1.0.3", CrowdControlMod.MOD_DEVELOPER, "https://crowdcontrol.live/")]
 
 namespace CrowdControl;
 
 /// <summary>
 /// The main Crowd Control mod class.
 /// </summary>
-[BepInPlugin(MOD_GUID, MOD_NAME, MOD_VERSION)]
-public class CrowdControlMod : BaseUnityPlugin
+public class CrowdControlMod : MelonMod
 {
     // Mod Details
     public const string MOD_GUID = "WarpWorld.CrowdControl";
+    public const string MOD_DEVELOPER = "Warp World";
     public const string MOD_NAME = "Crowd Control";
-    public const string MOD_VERSION = "1.0.0.0";
+    public const string MOD_VERSION = "1.0.3.0";
     
     public static float DeltaTime => Time.fixedDeltaTime; //change this to Time.deltaTime if using Update instead of FixedUpdate
 
     private readonly HarmonyLib.Harmony harmony = new(MOD_GUID);
 
     /// <summary>The logger for the mod.</summary>
-    public new ManualLogSource Logger => base.Logger;
+    public MelonLogger.Instance Logger => LoggerInstance;
 
     /// <summary>The singleton instance of the game mod.</summary>
     internal static CrowdControlMod Instance { get; private set; } = null!;
@@ -45,16 +48,16 @@ public class CrowdControlMod : BaseUnityPlugin
     private float m_gameStatusUpdateTimer;
 
     /// <summary>
-    /// Called when the mod is awakened.
+    /// Called when the mod is created.
     /// </summary>
-    void Awake()
+    public override void OnInitializeMelon()
     {
         Instance = this;
 
-        Logger.LogInfo($"Loaded {MOD_GUID}. Patching.");
+        Logger.Msg($"Loaded {MOD_GUID}. Patching.");
         harmony.PatchAll();
 
-        Logger.LogInfo("Initializing Crowd Control");
+        Logger.Msg("Initializing Crowd Control");
 
         try
         {
@@ -65,23 +68,24 @@ public class CrowdControlMod : BaseUnityPlugin
         }
         catch (Exception e)
         {
-            Logger.LogError($"Crowd Control Init Error: {e}");
+            Logger.Error($"Crowd Control Init Error: {e}");
         }
 
-        Logger.LogInfo("Crowd Control Initialized");
+        Logger.Msg("Crowd Control Initialized");
     }
 
     /// <summary>Called every fixed frame (physics) update.</summary>
     /// <remarks>This function is called on the main game thread. Blocking here may cause lag or crash the game entirely.</remarks>
-    void FixedUpdate()
+    public override void OnFixedUpdate()
     {
+        base.OnFixedUpdate();
         m_gameStatusUpdateTimer += Time.fixedDeltaTime;
         if (m_gameStatusUpdateTimer >= GAME_STATUS_UPDATE_INTERVAL)
         {
             GameStateManager.UpdateGameState();
             m_gameStatusUpdateTimer = 0f;
         }
-        
+
         Scheduler?.Tick();
     }
 

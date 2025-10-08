@@ -5,10 +5,10 @@ using CrowdControl.Delegates.Effects;
 
 namespace CrowdControl;
 
-public class Scheduler(CrowdControlMod mod, NetworkClient networkClient)
+public class Scheduler
 {
-    private CrowdControlMod m_mod = mod;
-    private NetworkClient m_networkClient = networkClient;
+    private CrowdControlMod m_mod;
+    private NetworkClient m_networkClient;
     
     private class RequestState
     {
@@ -94,6 +94,12 @@ public class Scheduler(CrowdControlMod mod, NetworkClient networkClient)
 
     private readonly ConcurrentQueue<RequestState> m_requestQueue = new();
     private readonly ConcurrentDictionary<uint, RequestState> m_runningEffects = new();
+    
+    public Scheduler(CrowdControlMod mod, NetworkClient networkClient)
+    {
+        m_mod = mod;
+        m_networkClient = networkClient;
+    }
 
     /// <summary>Checks if a timed effect of the specified type is currently running.</summary>
     /// <param name="id">The ID of the timed effect.</param>
@@ -118,7 +124,7 @@ public class Scheduler(CrowdControlMod mod, NetworkClient networkClient)
                         if (!m_mod.EffectLoader.Effects.ContainsKey(er.code))
                         {
                             m_networkClient.Send(new EffectResponse(er.id, EffectStatus.Unavailable, StandardErrors.UnknownEffect));
-                            CrowdControlMod.Instance.Logger.LogError(StandardErrors.UnknownEffect);
+                            CrowdControlMod.Instance.Logger.Error(StandardErrors.UnknownEffect);
                             return;
                         }
                         m_networkClient.Send(new EffectResponse(er.id, m_mod.GameStateManager.IsReady(er.code) ? EffectStatus.Success : EffectStatus.Failure));
@@ -130,7 +136,7 @@ public class Scheduler(CrowdControlMod mod, NetworkClient networkClient)
                         if (!m_mod.EffectLoader.Effects.TryGetValue(er.code, out Effect effect))
                         {
                             m_networkClient.Send(new EffectResponse(er.id, EffectStatus.Unavailable, StandardErrors.UnknownEffect));
-                            CrowdControlMod.Instance.Logger.LogError(StandardErrors.UnknownEffect);
+                            CrowdControlMod.Instance.Logger.Error(StandardErrors.UnknownEffect);
                             return;
                         }
                         m_requestQueue.Enqueue(new(er, effect));
@@ -141,7 +147,7 @@ public class Scheduler(CrowdControlMod mod, NetworkClient networkClient)
                         if (!m_runningEffects.TryGetValue(er.id, out RequestState state))
                         {
                             m_networkClient.Send(new EffectResponse(er.id, EffectStatus.Failure, StandardErrors.AlreadyFinished));
-                            CrowdControlMod.Instance.Logger.LogError(StandardErrors.AlreadyFinished);
+                            CrowdControlMod.Instance.Logger.Error(StandardErrors.AlreadyFinished);
                             return;
                         }
                         state.Stop();
@@ -191,7 +197,7 @@ public class Scheduler(CrowdControlMod mod, NetworkClient networkClient)
                 catch (Exception e)
                 {
                     response = EffectResponse.Failure(pReq.Request.id, StandardErrors.ExceptionThrown);
-                    CrowdControlMod.Instance.Logger.LogError(e.Message);
+                    CrowdControlMod.Instance.Logger.Error(e.Message);
                 }
                 m_networkClient.AttachMetadata(response);
                 m_networkClient.SendAsync(response).Forget();
