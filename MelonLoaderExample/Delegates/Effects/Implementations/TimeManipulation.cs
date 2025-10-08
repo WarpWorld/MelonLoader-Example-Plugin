@@ -8,7 +8,7 @@ namespace CrowdControl.Delegates.Effects.Implementations;
 [Effect(
     ids: new[] { "slowTime", "speedUpTime" },
     defaultDuration: 15,
-    conflicts: new string[] { "slowTime", "speedUpTime" }
+    conflicts: new[] { "slowTime", "speedUpTime" }
 )]
 public class TimeManipulation : Effect
 {
