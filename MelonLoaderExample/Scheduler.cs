@@ -121,7 +121,7 @@ public class Scheduler
                 case RequestType.EffectTest when (request is EffectRequest er):
                     {
                         er.code ??= string.Empty;
-                        if (!m_mod.EffectLoader.Effects.ContainsKey(er.code))
+                        if (!m_mod.EffectLoader.TryGetEffect(er.code, out _))
                         {
                             m_networkClient.Send(new EffectResponse(er.id, EffectStatus.Unavailable, StandardErrors.UnknownEffect));
                             CrowdControlMod.Instance.Logger.Error(StandardErrors.UnknownEffect);
@@ -133,7 +133,7 @@ public class Scheduler
                 case RequestType.EffectStart when (request is EffectRequest er):
                     {
                         er.code ??= string.Empty;
-                        if (!m_mod.EffectLoader.Effects.TryGetValue(er.code, out Effect effect))
+                        if (!m_mod.EffectLoader.TryGetEffect(er.code, out Effect effect))
                         {
                             m_networkClient.Send(new EffectResponse(er.id, EffectStatus.Unavailable, StandardErrors.UnknownEffect));
                             CrowdControlMod.Instance.Logger.Error(StandardErrors.UnknownEffect);

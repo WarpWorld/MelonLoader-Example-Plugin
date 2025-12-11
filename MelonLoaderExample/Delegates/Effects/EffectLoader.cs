@@ -1,4 +1,6 @@
-﻿using System.Reflection;
+﻿using System.Collections.Concurrent;
+using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace CrowdControl.Delegates.Effects;
 
@@ -12,7 +14,31 @@ public class EffectLoader
     /// This should not need to be explicitly filled out, it is done automatically via reflection in the static constructor.
     /// Just make sure to add the [Effect] attribute to your methods.
     /// </remarks>
-    public readonly Dictionary<string, Effect> Effects = new();
+    private readonly ConcurrentDictionary<string, Effect> m_effects = new();
+    
+    /// <summary>Provides a mapping of effect ID regex patterns to their respective delegate keys.</summary>
+    private readonly ConcurrentDictionary<string, Regex> m_regexes = new();
+    
+    public IEnumerable<string> EffectIDs => m_effects.Keys;
+
+    /// <summary>Gets the mapping of effect IDs to their respective delegates.</summary>
+    /// <param name="id">The effect ID to look up.</param>
+    /// <param name="effect">The effect delegate, if found.</param>
+    /// <returns>A dictionary mapping effect IDs to effect delegates.</returns>
+    public bool TryGetEffect(string id, out Effect effect)
+    {
+        if (m_effects.TryGetValue(id, out effect))
+            return true;
+
+        foreach (KeyValuePair<string, Effect> kvp in m_effects)
+        {
+            if (!m_regexes.GetOrAdd(kvp.Key, key => new(key, RegexOptions.Compiled)).IsMatch(id)) continue;
+            effect = kvp.Value;
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Automatically loads all effect delegates from the assembly.
@@ -27,7 +53,7 @@ public class EffectLoader
                 {
                     foreach (string id in attribute.IDs)
                     {
-                        try { Effects[id] = (Effect)Activator.CreateInstance(type, mod, client); }
+                        try { m_effects[id] = (Effect)Activator.CreateInstance(type, mod, client); }
                         catch (Exception e) { CrowdControlMod.Instance.Logger.Error(e); }
                     }
                 }
