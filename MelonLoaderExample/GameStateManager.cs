@@ -1,7 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
 using ConnectorLib.JSON;
-using Il2Cpp;
-using Il2CppAssets.Scripts.Actors.Player;
 using UnityEngine;
 
 namespace CrowdControl;
@@ -9,98 +7,87 @@ namespace CrowdControl;
 public class GameStateManager
 {
     //Everything in the game-specific region will need to be changed for each game
-    
+
     #region Game-Specific Code
+
+    /// <summary>
+    /// True to report <see cref="ConnectorLib.JSON.GameState.NotFocused"/> (blocking effects) while the game
+    /// window is not in the foreground, false to ignore focus entirely.
+    /// </summary>
+    /// <remarks>
+    /// Most games should leave this on so effects don't fire (and timed effects pause) while the player is
+    /// alt-tabbed. Set this to false for games that keep running normally in the background (e.g. games with
+    /// "Run In Background" enabled where streamers commonly play while interacting with chat in another window).
+    /// </remarks>
+    public const bool CARE_ABOUT_FOCUS = true;
 
     /// <summary>Checks if the game is in a state where effects can be applied.</summary>
     /// <param name="code">The effect codename the caller is intending to apply.</param>
     /// <returns>True if the game is in a state where the effect can be applied, false otherwise.</returns>
     /// <remarks>
     /// The <paramref name="code"/> parameter is not normally checked.
-    /// Use this is you want to exempt certain effects from checks (e.g. debug or "fix-it" effects).
+    /// Use this if you want to exempt certain effects from checks (e.g. debug or "fix-it" effects).
     /// </remarks>
-    public bool IsReady(string code = "") => GetGameState() == ConnectorLib.JSON.GameState.Ready;
+    public bool IsReady(string code = "") => CurrentState == ConnectorLib.JSON.GameState.Ready;
 
-    /// <summary>Gets the current game state as it pertains to the firing of effects.</summary>
+    /// <summary>Computes the current game state as it pertains to the firing of effects.</summary>
     /// <returns>The current game state.</returns>
-    public GameState GetGameState()
+    /// <remarks>
+    /// This must be called from the main game thread only - it is expected to touch game/Unity APIs.
+    /// Report state changes as precisely as your game allows (Paused, NotFocused, Menu, Loading, Cutscene, ...)
+    /// so the Crowd Control client and effect pack always know what's going on.
+    /// Prefer reading <see cref="CurrentState"/> over calling this directly - it caches the result
+    /// so the state is only computed once per game tick regardless of how many callers query it.
+    /// </remarks>
+    public ConnectorLib.JSON.GameState GetGameState()
     {
         try
         {
-            // Application isn't even focused, game has probably autopaused or is about to
-            if (!Application.isFocused)
-                return GameState.Paused;
+            //these two checks are game-agnostic and can usually be kept as-is
+            //set CARE_ABOUT_FOCUS to false (above) if effects should keep running while the game is unfocused
+#pragma warning disable CS0162 // Unreachable code detected - CARE_ABOUT_FOCUS is a compile-time constant
+            if (CARE_ABOUT_FOCUS && !Application.isFocused)
+                return ConnectorLib.JSON.GameState.NotFocused;
+#pragma warning restore CS0162
 
-            // No player, probably in main menu or loading screen
-            if (!MyPlayer.Instance)
-                return GameState.Menu;
-            
-            // No game manager, probably in main menu or loading screen
-            if (!GameManager.Instance)
-                return GameState.Menu;
-            
-            // Game reports it's in a cutscene
-            if (GameManager.Instance.cutscene)
-                return GameState.Cutscene;
+            //most Unity games set the time scale to 0 while paused - replace this with your game's own pause flag if it has one
+            if (Time.timeScale == 0f)
+                return ConnectorLib.JSON.GameState.Paused;
 
-            // The level time is very low so we're probably loading in or just loaded in
-            if (GameManager.Instance.totalStageTime <= 1)
-                return GameState.Loading;
+            /* == EXAMPLE - typical game-specific state checks ==
+             * Replace the placeholder classes with your game's real APIs. Report state as precisely
+             * as your game allows so the Crowd Control client and effect pack always know what's going on.
 
-            // Game is over so player is presumably dead or has won (can you win in this game?)
-            if (GameManager.Instance.isGameOver)
-                return GameState.BadPlayerState;
-            
-            // Game explicitly reports not playing (main menu, level select, etc)
-            if (!GameManager.Instance.isPlaying)
-                return GameState.Menu;
+            // No player or game manager yet - probably the main menu or a loading screen
+            if (!Player.Instance || !GameManager.Instance)
+                return ConnectorLib.JSON.GameState.Menu;
 
-            // Catch unexpected null refs inside IsDead
-            try
-            {
-                // Player is dead
-                if (MyPlayer.Instance.IsDead())
-                    return GameState.BadPlayerState;
-            }
-            catch { /**/ }
-            
-            // Game is paused, or one of several UI screens (which also pause the action) is open
-            if (Il2CppAssets.Scripts.Utility.MyTime.paused || isPausedChecker() || chestOpen() || levelUpOpen())
-                return GameState.Paused;
+            // The game reports it's loading a level
+            if (GameManager.Instance.isLoading)
+                return ConnectorLib.JSON.GameState.Loading;
 
-            // If all checks pass, we're ready for effects
-            return GameState.Ready;
+            // The game reports it's in a cutscene or scripted sequence
+            if (GameManager.Instance.inCutscene)
+                return ConnectorLib.JSON.GameState.Cutscene;
+
+            // The player is dead, respawning, or otherwise not in a state to receive effects
+            if (Player.Instance.isDead)
+                return ConnectorLib.JSON.GameState.BadPlayerState;
+
+            // A menu, dialog, or other UI screen is open over the game
+            if (UIManager.Instance.anyMenuOpen)
+                return ConnectorLib.JSON.GameState.Paused;
+
+            */
+
+            //TODO: add your game-specific state checks here (see the commented example above)
+
+            return ConnectorLib.JSON.GameState.Ready;
         }
         catch (Exception e)
         {
             CrowdControlMod.Instance.Logger.Error($"GameStateManager Error: {e}");
-            return GameState.Error;
-        }
-
-        // Helper functions to keep things tidy
-
-        // Check if the pause menu is open
-        bool isPausedChecker()
-        {
-            PauseUi pauseUi = UiManager.Instance?.pause;
-            return pauseUi != null && pauseUi.isActiveAndEnabled;
-        }
-
-        // Check if a chest UI is open
-        bool chestOpen()
-        {
-            ChestWindowUi chestUi = UnityEngine.Object.FindObjectOfType<ChestWindowUi>();
-            return chestUi != null
-                   && chestUi.window != null
-                   && chestUi.window.gameObject.activeInHierarchy;
-        }
-
-        // Check if the level up UI is open
-        bool levelUpOpen()
-        {
-            LevelupScreen level = UnityEngine.Object.FindObjectOfType<LevelupScreen>();
-            return (level != null && level.window != null && level.window.activeInHierarchy)
-                   || LevelupScreen.isLevelingUp;
+            return ConnectorLib.JSON.GameState.Error;
         }
     }
 
@@ -110,11 +97,36 @@ public class GameStateManager
 
     #region General Code
 
+    //caches the result of GetGameState() for the duration of one game tick - the state is computed at most
+    //once per tick no matter how many effects and requests query it, keeping GetGameState() cheap to call
+    private ConnectorLib.JSON.GameState? m_cachedState;
+
+    /// <summary>Gets the current game state, computing it at most once per game tick.</summary>
+    /// <remarks>
+    /// Must be called from the main game thread only.
+    /// The cache is invalidated at the start of every tick by <see cref="CrowdControlMod.OnFixedUpdate"/>
+    /// - callers always see a value from the current tick.
+    /// </remarks>
+    public ConnectorLib.JSON.GameState CurrentState => m_cachedState ??= GetGameState();
+
+    /// <summary>Discards the cached game state so the next query recomputes it.</summary>
+    public void InvalidateStateCache() => m_cachedState = null;
+
+    //set (from any thread) when a full state report needs to be sent regardless of whether the state changed,
+    //e.g. right after the Crowd Control client (re)connects
+    private volatile bool m_stateResendRequested;
+
+    /// <summary>
+    /// Requests that the next game state report be sent even if the state hasn't changed.
+    /// </summary>
+    /// <remarks>This is safe to call from any thread. The report itself is sent from the game thread.</remarks>
+    public void RequestStateResend() => m_stateResendRequested = true;
+
     /// <summary>Reports the updated game state to the Crowd Control client.</summary>
     /// <param name="force">True to force the report to be sent, even if the state is the same as the previous state, false to only report the state if it has changed.</param>
     /// <returns>True if the data was sent successfully, false otherwise.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool UpdateGameState(bool force = false) => UpdateGameState(GetGameState(), force);
+    public bool UpdateGameState(bool force = false) => UpdateGameState(CurrentState, force);
 
     /// <summary>Reports the updated game state to the Crowd Control client.</summary>
     /// <param name="newState">The new game state to report.</param>
@@ -135,8 +147,14 @@ public class GameStateManager
     /// <param name="message">The message to attach to the state report.</param>
     /// <param name="force">True to force the report to be sent, even if the state is the same as the previous state, false to only report the state if it has changed.</param>
     /// <returns>True if the data was sent successfully, false otherwise.</returns>
-    public bool UpdateGameState(ConnectorLib.JSON.GameState newState, string? message = null, bool force = false)
+    public bool UpdateGameState(ConnectorLib.JSON.GameState newState, string message = null, bool force = false)
     {
+        if (m_stateResendRequested)
+        {
+            m_stateResendRequested = false;
+            force = true;
+        }
+
         if (force || (_last_game_state != newState))
         {
             _last_game_state = newState;

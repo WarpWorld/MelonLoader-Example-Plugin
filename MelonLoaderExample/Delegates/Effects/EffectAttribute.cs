@@ -34,7 +34,8 @@ public class EffectAttribute : Attribute
 
     public EffectAttribute(string id) : this(new[] { id }, SITimeSpan.Zero, Array.Empty<string>()) { }
 
-    public EffectAttribute(string id, float defaultDuration) : this(new[] { id }, defaultDuration, (SITimeSpan.Zero > 0) ? new[] { id } : Array.Empty<string>()) { }
+    //timed effects (duration > 0) conflict with themselves by default
+    public EffectAttribute(string id, float defaultDuration) : this(new[] { id }, defaultDuration, (defaultDuration > 0) ? new[] { id } : Array.Empty<string>()) { }
 
     public EffectAttribute(string id, float defaultDuration, string conflict) : this(new[] { id }, defaultDuration, new[] { conflict }) { }
 

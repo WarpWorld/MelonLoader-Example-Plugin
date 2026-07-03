@@ -1,10 +1,18 @@
 using ConnectorLib.JSON;
-using Il2CppAssets.Scripts.Actors.Player;
 using UnityEngine;
 
 namespace CrowdControl.Delegates.Effects.Implementations;
 
-
+/// <summary>
+/// == EXAMPLE - a timed effect where multiple codes conflict with each other ==
+/// This effect only uses standard Unity APIs, so it works in any Unity game and ships live
+/// as a working demonstration. It shows the standard shape of a timed effect:
+///   - a duration and a conflicts list declared on the [Effect] attribute
+///     (slowTime and speedUpTime conflict with each other AND with themselves, so only
+///     one time manipulation can ever be active - the Scheduler enforces this locally)
+///   - Start() applies the change and Stop() reverts it
+///   - pausing/resuming and remaining-time reporting are handled automatically by TimedEffectState
+/// </summary>
 [Effect(
     ids: new[] { "slowTime", "speedUpTime" },
     defaultDuration: 15,
@@ -33,8 +41,12 @@ public class TimeManipulation : Effect
                     break;
 
                 default:
-                    return EffectResponse.Failure(request.ID, $"Unknown effect code {request.code}");
+                    return EffectResponse.Failure(request.ID, StandardErrors.EffectUnknown);
             }
+
+            //request.GetViewerDisplayName() returns a sanitized viewer name that is safe to
+            //show on screen or in logs (handles odd character sets, markup, etc)
+            CrowdControlMod.Instance.Logger.Msg($"{request.GetViewerDisplayName()} started {request.code}");
 
             return EffectResponse.Success(request.ID);
         }

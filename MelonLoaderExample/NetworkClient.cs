@@ -13,10 +13,10 @@ namespace CrowdControl;
 public partial class NetworkClient : IDisposable
 {
     private const bool PROCESS_LOOKUP_FALLBACK = true;
-    
+
     private static readonly SITimeSpan TIMEOUT_NO_PROCESS = 5;
     private static readonly SITimeSpan TIMEOUT_NO_CONNECTION = 2;
-    
+
     /// <summary>Crowd Control client IP or hostname.</summary>
     public static readonly string CV_HOST = "127.0.0.1";
 
@@ -30,8 +30,10 @@ public partial class NetworkClient : IDisposable
     private readonly CrowdControlMod m_mod;
 
     private readonly CancellationTokenSource m_quitting = new();
+    private readonly object m_shutdownLock = new();
+    private readonly object m_sendLock = new();
+    private volatile bool m_disposed;
 
-    //dispose of the websocket when the client is destroyed
     ~NetworkClient() => Dispose(false);
 
     // ReSharper disable NotAccessedField.Local
@@ -40,18 +42,76 @@ public partial class NetworkClient : IDisposable
     // ReSharper restore NotAccessedField.Local
 
     /// <summary>Disposes of the client connection.</summary>
-    public void Dispose() => Dispose(true);
-
-    /// <summary>Disposes of the client connection.</summary>
-    /// <param name="disposing">True if this is being called from a disposer, false if the call is from a finalizer.</param>
-    protected virtual void Dispose(bool disposing)
+    public void Dispose()
     {
-        try { m_client?.Dispose(); }
-        catch {/**/}
-        try { m_quitting.Cancel(); }
-        catch {/**/}
+        Dispose(true);
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>Closes the Crowd Control socket and stops background threads (call from <c>OnApplicationQuit</c>).</summary>
+    /// <param name="disposing">True when releasing managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing)
+            return;
+
+        lock (m_shutdownLock)
+        {
+            if (m_disposed)
+                return;
+            m_disposed = true;
+        }
+
+        try { m_quitting.Cancel(); }
+        catch {/**/}
+
+        CloseConnection();
+    }
+
+    private void CloseConnection()
+    {
+        lock (m_sendLock)
+        {
+            try
+            {
+                m_streamReader?.Dispose();
+            }
+            catch {/**/}
+            finally
+            {
+                m_streamReader = null;
+            }
+
+            try
+            {
+                if (m_client?.Connected == true)
+                    m_client.Client.Shutdown(SocketShutdown.Both);
+
+                m_client?.Close();
+                m_client?.Dispose();
+            }
+            catch {/**/}
+            finally
+            {
+                m_client = null;
+            }
+        }
+    }
+
+    private static bool IsBenignShutdownException(Exception e, bool quitting) =>
+        quitting
+        || e is ThreadAbortException
+        || e is ObjectDisposedException
+        || e is OperationCanceledException
+        || (e is IOException io && io.InnerException is SocketException se && IsBenignSocketError(se.SocketErrorCode))
+        || (e is SocketException se2 && IsBenignSocketError(se2.SocketErrorCode));
+
+    private static bool IsBenignSocketError(SocketError code) =>
+        code is SocketError.ConnectionAborted
+            or SocketError.ConnectionReset
+            or SocketError.Interrupted
+            or SocketError.OperationAborted
+            or SocketError.Shutdown;
 
     /// <summary>True if the game is connected to the Crowd Control client, false otherwise.</summary>
     public bool Connected => m_client?.Connected ?? false;
@@ -62,9 +122,17 @@ public partial class NetworkClient : IDisposable
     {
         m_mod = mod;
 
-        (m_readLoop = new Thread(NetworkLoop)).Start();
-        (m_maintenanceLoop = new Thread(MaintenanceLoop)).Start();
+        m_readLoop = new Thread(NetworkLoop) { IsBackground = true, Name = "CrowdControl.NetworkRead" };
+        m_maintenanceLoop = new Thread(MaintenanceLoop) { IsBackground = true, Name = "CrowdControl.NetworkMaintenance" };
+        m_readLoop.Start();
+        m_maintenanceLoop.Start();
     }
+
+    //these track whether each state-transition message has already been logged so the retry loops stay
+    //quiet in the log - each message is logged once, then again only after the state changes and repeats
+    //(e.g. client found -> closed -> found -> closed logs "no client found" twice, not every few seconds)
+    private bool m_loggedNoProcess;
+    private bool m_loggedConnectFailure;
 
     /// <summary>Maintains a connection to the network stream. Passes control to <see cref="ClientLoop"/> while connected.</summary>
     private void NetworkLoop()
@@ -73,17 +141,28 @@ public partial class NetworkClient : IDisposable
         while (!m_quitting.IsCancellationRequested)
         {
 #pragma warning disable CS0162 // Unreachable code detected
-            // Check if CrowdControl process is running before attempting to connect
+            // Check if the Crowd Control client is running before attempting to connect
             if ((!IsCrowdControlSemaphorePresent()) &&
                 (!(PROCESS_LOOKUP_FALLBACK && IsCrowdControlProcessRunning())))
             {
-                CrowdControlMod.Instance.Logger.Error("No CrowdControl process found, skipping connection attempt...");
-                Thread.Sleep((TimeSpan)TIMEOUT_NO_PROCESS);
+                if (!m_loggedNoProcess)
+                {
+                    CrowdControlMod.Instance.Logger.Msg("No Crowd Control client found. Waiting for it to start before attempting to connect...");
+                    m_loggedNoProcess = true;
+                }
+                m_loggedConnectFailure = false; //the client went away - log the next connection failure (if any) once more
+                m_quitting.Token.WaitHandle.WaitOne((TimeSpan)TIMEOUT_NO_PROCESS);
                 continue;
             }
 #pragma warning restore CS0162 // Unreachable code detected
-            
-            CrowdControlMod.Instance.Logger.Msg("Attempting to connect to Crowd Control");
+            if (m_loggedNoProcess)
+            {
+                CrowdControlMod.Instance.Logger.Msg("Crowd Control client found.");
+                m_loggedNoProcess = false;
+            }
+
+            if (!m_loggedConnectFailure)
+                CrowdControlMod.Instance.Logger.Msg("Attempting to connect to Crowd Control");
 
             try
             {
@@ -92,21 +171,34 @@ public partial class NetworkClient : IDisposable
                 m_client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 if (m_client.BeginConnect(CV_HOST, CV_PORT, null, null).AsyncWaitHandle.WaitOne(2000, true) &&
                     m_client.Connected)
+                {
+                    m_loggedConnectFailure = false; //connected - log the next connection failure (if any) once more
                     ClientLoop();
-                else
-                    CrowdControlMod.Instance.Logger.Error("Failed to connect to Crowd Control");
+                }
+                else if (!m_loggedConnectFailure)
+                {
+                    CrowdControlMod.Instance.Logger.Msg("Failed to connect to Crowd Control. Retrying quietly...");
+                    m_loggedConnectFailure = true;
+                }
             }
             catch (Exception e)
             {
-                CrowdControlMod.Instance.Logger.Error(e);
-                CrowdControlMod.Instance.Logger.Error("Failed to connect to Crowd Control");
+                if (!IsBenignShutdownException(e, m_quitting.IsCancellationRequested) && !m_loggedConnectFailure)
+                {
+                    CrowdControlMod.Instance.Logger.Error(e);
+                    CrowdControlMod.Instance.Logger.Error("Failed to connect to Crowd Control. Retrying quietly...");
+                    m_loggedConnectFailure = true;
+                }
             }
             finally
             {
-                try { m_client?.Close(); }
-                catch {/**/}
+                CloseConnection();
             }
-            Thread.Sleep((TimeSpan)TIMEOUT_NO_CONNECTION);
+
+            if (m_quitting.IsCancellationRequested)
+                break;
+
+            m_quitting.Token.WaitHandle.WaitOne((TimeSpan)TIMEOUT_NO_CONNECTION);
         }
     }
 
@@ -118,11 +210,12 @@ public partial class NetworkClient : IDisposable
         {
             try
             {
-                if (m_client?.Connected ?? false)
+                if (!m_disposed && (m_client?.Connected ?? false))
                     KeepAlive();
             }
             catch { /**/ }
-            Thread.Sleep(2000);
+
+            m_quitting.Token.WaitHandle.WaitOne(1000);
         }
     }
 
@@ -130,27 +223,41 @@ public partial class NetworkClient : IDisposable
     private void ClientLoop()
     {
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture; //do not remove this - kat
-        
-        m_streamReader = new(m_client!.GetStream());
-        CrowdControlMod.Instance.Logger.Msg("Connected to Crowd Control");
 
         try
         {
-            while (!m_quitting.IsCancellationRequested)
+            m_streamReader = new(m_client!.GetStream());
+            CrowdControlMod.Instance.Logger.Msg("Connected to Crowd Control");
+
+            //the client that just (re)connected needs a fresh game state report
+            //this just sets a flag - the actual report is sent from the game thread
+            m_mod.GameStateManager?.RequestStateResend();
+
+            try
             {
-                string message = m_streamReader.ReadUntilNullTerminator();
-                OnMessage(message.Trim());
+                while (!m_quitting.IsCancellationRequested)
+                {
+                    string message = m_streamReader.ReadUntilNullTerminator();
+                    OnMessage(message.Trim());
+                }
+            }
+            catch (EndOfStreamException)
+            {
+                if (!m_quitting.IsCancellationRequested)
+                    CrowdControlMod.Instance.Logger.Msg("Disconnected from Crowd Control");
+            }
+            catch (Exception e)
+            {
+                if (!IsBenignShutdownException(e, m_quitting.IsCancellationRequested))
+                {
+                    CrowdControlMod.Instance.Logger.Error(e);
+                    CrowdControlMod.Instance.Logger.Error("Disconnected from Crowd Control");
+                }
             }
         }
-        catch (EndOfStreamException)
+        finally
         {
-            CrowdControlMod.Instance.Logger.MsgPastel("Disconnected from Crowd Control");
-            m_client?.Close();
-        }
-        catch (Exception e)
-        {
-            CrowdControlMod.Instance.Logger.Error(e);
-            m_client?.Close();
+            CloseConnection();
         }
     }
 
@@ -158,21 +265,29 @@ public partial class NetworkClient : IDisposable
     /// <param name="message">A JSON-formatted message body.</param>
     private void OnMessage(string message)
     {
+        if (m_disposed || m_quitting.IsCancellationRequested)
+            return;
         if (string.IsNullOrWhiteSpace(message)) return;
         try
         {
-            if (!SimpleJSONRequest.TryParse(message, out SimpleJSONRequest? req)) return;
-            m_mod.Scheduler.ProcessRequest(req!);
+            if (!SimpleJSONRequest.TryParse(message, out SimpleJSONRequest req)) return;
+            m_mod.Scheduler.ProcessRequest(req);
         }
         catch (Exception ex)
         {
             CrowdControlMod.Instance.Logger.Error(ex);
         }
     }
-    
+
     /// <summary>Checks if the CrowdControl semaphore is present, indicating that the CrowdControl client is running.</summary>
     /// <returns>True if the semaphore is present, false otherwise.</returns>
-    private static bool IsCrowdControlSemaphorePresent() => Semaphore.TryOpenExisting("CrowdControl", out _);
+    private static bool IsCrowdControlSemaphorePresent()
+    {
+        //named semaphores are unsupported on some platforms (e.g. non-Windows), so failures
+        //here just mean "unknown" and we fall back to the process name lookup
+        try { return Semaphore.TryOpenExisting("CrowdControl", out _); }
+        catch { return false; }
+    }
 
     /// <summary>
     /// Checks if any CrowdControl process is running.
@@ -182,51 +297,44 @@ public partial class NetworkClient : IDisposable
     /// <returns>True if a CrowdControl process is found, false otherwise.</returns>
     private static bool IsCrowdControlProcessRunning()
     {
+        Process[] processes = null;
         try
         {
-            Process[] processes = Process.GetProcesses();
-            int accessibleProcesses = 0;
-            int inaccessibleProcesses = 0;
-            
+            processes = Process.GetProcesses();
+            bool inaccessibleProcesses = false;
+
             foreach (Process process in processes)
             {
                 try
                 {
                     if (process.ProcessName.IndexOf("crowdcontrol", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        CrowdControlMod.Instance.Logger.Msg($"Found CrowdControl process: {process.ProcessName} (PID: {process.Id})");
                         return true;
-                    }
-                    accessibleProcesses++;
                 }
-                catch (UnauthorizedAccessException)
+                catch (InvalidOperationException)
                 {
-                    // Process is running with different privileges (e.g., admin vs regular user)
-                    inaccessibleProcesses++;
+                    // The process exited between the snapshot and this check - ignore it
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    // Other access issues
-                    CrowdControlMod.Instance.Logger.Msg($"Could not access process: {ex.Message}");
-                    inaccessibleProcesses++;
+                    // Process is running with different privileges (e.g. admin vs regular user)
+                    inaccessibleProcesses = true;
                 }
             }
-            
-            // If we have inaccessible processes, it's possible CrowdControl is running with different privileges
-            if (inaccessibleProcesses > 0)
-            {
-                CrowdControlMod.Instance.Logger.Msg($"Found {inaccessibleProcesses} inaccessible processes (possibly running with different privileges). Attempting connection anyway.");
-                // This handles the case where CrowdControl is running as admin but game is not
-                return true;
-            }
-            
-            return false;
+
+            // If we couldn't inspect some processes, Crowd Control may be running with elevated privileges,
+            // so we attempt the connection anyway. A failed connection attempt is cheap and harmless.
+            return inaccessibleProcesses;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            CrowdControlMod.Instance.Logger.Error($"Error checking for CrowdControl processes: {ex.Message}");
             // If we can't check processes at all, assume CrowdControl might be running and attempt connection
             return true;
+        }
+        finally
+        {
+            if (processes != null)
+                foreach (Process process in processes)
+                    process.Dispose();
         }
     }
 
@@ -237,15 +345,26 @@ public partial class NetworkClient : IDisposable
     {
         try
         {
-            if (response == null) return false;
-            if (!Connected) return false;
-            byte[] bytes = Encoding.UTF8.GetBytes(response.Serialize()).Concat(new byte[] { 0 }).ToArray();
-            m_client!.GetStream().Write(bytes, 0, bytes.Length);
-            return true;
+            if (response == null || m_disposed || m_quitting.IsCancellationRequested)
+                return false;
+
+            byte[] payload = Encoding.UTF8.GetBytes(response.Serialize());
+            byte[] bytes = new byte[payload.Length + 1];
+            Array.Copy(payload, bytes, payload.Length); //the final byte stays 0 as the message terminator
+
+            lock (m_sendLock)
+            {
+                if (m_client?.Connected != true)
+                    return false;
+
+                m_client.GetStream().Write(bytes, 0, bytes.Length);
+                return true;
+            }
         }
         catch (Exception e)
         {
-            CrowdControlMod.Instance.Logger.Error($"Error sending a message to the Crowd Control client: {e}");
+            if (!IsBenignShutdownException(e, m_quitting.IsCancellationRequested))
+                CrowdControlMod.Instance.Logger.Error($"Error sending a message to the Crowd Control client: {e}");
             return false;
         }
     }
@@ -253,11 +372,14 @@ public partial class NetworkClient : IDisposable
     /// <inheritdoc cref="Send"/>
     /// <summary>Asynchronously sends a response message to the Crowd Control client.</summary>
     public Task<bool> SendAsync(SimpleJSONResponse response) => Task.Run(() => Send(response));
-    
+
     /// <summary>Closes the connection to the Crowd Control client.</summary>
     /// <param name="message">An optional reason message to send to the client prior to disconnection.</param>
     public void Stop(string message = null)
     {
+        if (m_disposed)
+            return;
+
         if (message != null)
         {
             Send(new MessageResponse()
@@ -266,7 +388,11 @@ public partial class NetworkClient : IDisposable
                 message = message
             });
         }
-        m_client?.Close();
+
+        try { m_quitting.Cancel(); }
+        catch {/**/}
+
+        CloseConnection();
     }
 
     /// <inheritdoc cref="Stop"/>

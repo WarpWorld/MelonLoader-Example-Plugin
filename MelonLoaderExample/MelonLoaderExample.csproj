@@ -2,14 +2,20 @@
 
     <PropertyGroup>
         <!-- ALWAYS SET THESE FOR A NEW GAME! -->
+        <!-- The name of the game being modded, without spaces or punctuation (e.g. Megabonk).
+             This names the output DLL (e.g. CrowdControl.Megabonk.dll).
+             Also update MOD_NAME (and MOD_VERSION) and the [MelonGame] attribute in CrowdControlMod.cs -
+             those must be compile-time constants for the MelonLoader attributes, so they can't be set from this file. -->
+        <GameName>MyGame</GameName>
         <TargetFramework>net6.0</TargetFramework>
-        <GameBaseDir>C:\Program Files (x86)\Steam\steamapps\common\Megabonk</GameBaseDir>
+        <GameBaseDir>C:\Program Files (x86)\Steam\steamapps\common\My Game</GameBaseDir>
         <GameAssemblyDir>$(GameBaseDir)\MelonLoader\Il2CppAssemblies</GameAssemblyDir>
         <DotNetAssemblyDir>$(GameBaseDir)\MelonLoader\net6</DotNetAssemblyDir>
         <!--========================================-->
 
         <RootNamespace>CrowdControl</RootNamespace>
-        <AssemblyName>CrowdControl</AssemblyName>
+        <AssemblyName>CrowdControl.$(GameName)</AssemblyName>
+        <Product>Crowd Control for $(GameName)</Product>
 
         <FileAlignment>512</FileAlignment>
         <Deterministic>true</Deterministic>

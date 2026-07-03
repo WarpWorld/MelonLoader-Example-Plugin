@@ -1,6 +1,4 @@
-﻿using ConnectorLib.JSON;
-
-//Everything in the Metadata namespace is free-form and just needs to have static methods with the Metadata attribute
+﻿//Everything in the Metadata namespace is free-form and just needs to have static methods with the Metadata attribute
 //non-effect helper methods are allowed and encouraged - kat
 namespace CrowdControl.Delegates.Metadata;
 
@@ -9,23 +7,31 @@ namespace CrowdControl.Delegates.Metadata;
 public static class MetadataDelegates
 {
     //everything in this list will be automatically included as metadata in every effect response
-    public static readonly string[] CommonMetadata = { "levelTime" };
-    
-    [Metadata("levelTime")]
-    public static DataResponse LevelTime(CrowdControlMod mod)
+    //add the keys of your [Metadata] delegates here (e.g. "playerHealth" in the commented example below)
+    public static readonly string[] CommonMetadata = Array.Empty<string>();
+
+    /* == EXAMPLE - a metadata delegate reporting the player's current health ==
+     * Metadata delegates are looked up by key. They are invoked to enrich every effect response
+     * (if listed in CommonMetadata above) and to answer direct DataRequest queries from the client.
+     * Replace the placeholder classes with your game's real APIs. Requires: using ConnectorLib.JSON;
+
+    [Metadata("playerHealth")]
+    public static DataResponse PlayerHealth(CrowdControlMod mod)
     {
-        const string KEY = "levelTime";
+        const string KEY = "playerHealth";
         try
         {
-            //float? levelTime = SingletonBehaviour<GameplayManager>.Instance?.CurrentLevelStats?.LevelTime;
-            //if (levelTime == null) return DataResponse.Failure(KEY, "Couldn't find health component.");
+            float? health = Player.Instance?.health;
+            if (health == null) return DataResponse.Failure(KEY, "Couldn't find the player's health.");
 
-            return DataResponse.Success(KEY, 0);
+            return DataResponse.Success(KEY, health);
         }
         catch (Exception e)
         {
             CrowdControlMod.Instance.Logger.Error($"Crowd Control Error: {e}");
             return DataResponse.Failure(KEY, e, "The plugin encountered an internal error. Check the game logs for more information.");
-        };
+        }
     }
+
+    */
 }
