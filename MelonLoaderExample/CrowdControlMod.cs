@@ -56,6 +56,9 @@ public class CrowdControlMod : MelonMod
 
     public Scheduler Scheduler { get; private set; } = null!;
 
+    private const double MANUAL_RECONNECT_COOLDOWN_SECONDS = 5.0;
+    private DateTime m_nextManualReconnectAllowedUtc = DateTime.MinValue;
+
     /// <summary>
     /// Called when the mod is created.
     /// </summary>
@@ -121,6 +124,42 @@ public class CrowdControlMod : MelonMod
 
     private bool m_hadFocus = true;
 
+    private void HandleManualReconnectHotkey()
+    {
+        if (!Input.GetKeyDown(KeyCode.F9))
+            return;
+
+        DateTime now = DateTime.UtcNow;
+        if (now < m_nextManualReconnectAllowedUtc)
+            return;
+
+        m_nextManualReconnectAllowedUtc = now.AddSeconds(MANUAL_RECONNECT_COOLDOWN_SECONDS);
+        Logger.Msg("F9 pressed - manual Crowd Control reconnect requested.");
+
+        if (Client?.RequestReconnect() == true)
+        {
+            ShowGameUiMessage("Reconnecting to Crowd Control...");
+            Logger.Msg("Manual Crowd Control reconnect queued.");
+        }
+        else
+        {
+            ShowGameUiMessage("Crowd Control client not found.");
+            Logger.Msg("Manual Crowd Control reconnect skipped because the Crowd Control client was not found.");
+        }
+    }
+
+    /// <summary>
+    /// Displays a message to the player using the game's UI/toast system.
+    /// </summary>
+    /// <remarks>
+    /// This is intentionally a no-op in the example pack because UI/toast APIs are game-specific.
+    /// Wire this to your game's toast, subtitle, HUD message, or dialog system when available.
+    /// </remarks>
+    public void ShowGameUiMessage(string message)
+    {
+        //TODO: Replace this with your game's UI/toast call, e.g. ToastManager.Show(message).
+    }
+
     /// <summary>Called every rendered frame.</summary>
     /// <remarks>
     /// MelonLoader mods don't receive Unity's OnApplicationFocus callback, so focus changes are detected here
@@ -131,6 +170,8 @@ public class CrowdControlMod : MelonMod
     {
         try
         {
+            HandleManualReconnectHotkey();
+
             bool hasFocus = Application.isFocused;
             if (hasFocus == m_hadFocus) return;
             m_hadFocus = hasFocus;
