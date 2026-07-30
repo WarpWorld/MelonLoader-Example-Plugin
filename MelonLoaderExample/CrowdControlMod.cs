@@ -1,6 +1,7 @@
 ﻿using CrowdControl;
 using CrowdControl.Delegates.Effects;
 using MelonLoader;
+using System.Reflection;
 using UnityEngine;
 
 //ALWAYS SET THIS FOR A NEW GAME! - the developer and game name MelonLoader should match against
@@ -186,4 +187,28 @@ public class CrowdControlMod : MelonMod
     //attach this to some game class with a function that runs every frame like the player's Update()
     //[HarmonyPatch(typeof(PlayerMovement), nameof(PlayerMovement.FixedUpdate))]
     //private class PlayerMovement_FixedUpdate { static void Prefix() => Instance.OnFixedUpdate(); }
+
+    private string? _modVersion = null;
+    public string Version
+    {
+        get
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(_modVersion)) return _modVersion;
+
+                string ccver = File.ReadAllText(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "ccver"));
+                if (string.IsNullOrEmpty(ccver))
+                    _modVersion = MOD_VERSION;
+                else
+                    _modVersion = ccver;
+                return _modVersion;
+            }
+            catch (Exception e)
+            {
+                Logger.LogInfo($"Error retrieving mod version: {e}");
+                return "0";
+            }
+        }
+    }
 }
