@@ -26,7 +26,16 @@ Instructions:
 	- `TimeManipulation.cs` - a live, working timed effect (it only uses standard Unity APIs,
 	  so it runs in any Unity game) demonstrating durations and effect conflicts  
 	- `ExampleInstantEffect.cs` - a commented skeleton for instant (non-timed) effects showing
-	  multiple codes per class, quantities, and clean failure reporting
+	  multiple codes per class, quantities, and clean failure reporting  
+	The remaining files are commented examples from a real game (marked `== EXAMPLE (Anger Foot) ==`),
+	each demonstrating a pattern:  
+	- `CompleteLevel.cs` / `RestartLevel.cs` - instant (non-timed) effects  
+	- `GodMode.cs` / `InfiniteAmmo.cs` - timed effects toggled on start/stop  
+	- `ForceKick.cs` - a timed effect that acts every tick  
+	- `PassiveEnemies.cs` / `StaticEnemies.cs` - timed effects with cross-effect conflicts  
+	`Harmony\` contains matching commented examples of Harmony patches (tracking game state from
+	the game's own calls, and adding debug commands to a dev console). MelonLoader applies every
+	`[HarmonyPatch]` class in the assembly automatically at startup.
 
 4) Create Timed Effects  
 	Timed effects are any effects with a `defaultDuration` on their `[Effect]` attribute.  

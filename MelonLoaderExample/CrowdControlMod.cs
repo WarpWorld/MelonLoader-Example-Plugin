@@ -177,6 +177,7 @@ public class CrowdControlMod : MelonMod
         UI.Overlay.Show(message);
 
         //TODO: optionally also call your game's own toast/subtitle system, e.g. ToastManager.Show(message).
+        //      (see the commented DialogMsgAsync example in GameStateManager.cs for how this was done for Anger Foot)
     }
 
     /// <summary>True if the Crowd Control app appears to be running on this machine.</summary>

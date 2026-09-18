@@ -10,6 +10,36 @@ public class GameStateManager
 
     #region Game-Specific Code
 
+    /* == EXAMPLE (Anger Foot) - a helper for showing on-screen messages using the game's own dialog system ==
+     * The example effects call CrowdControlMod.ShowGameUiMessage(), which goes to the mod's overlay.
+     * If your game has a toast/dialog system of its own, add a helper like this and call it from
+     * ShowGameUiMessage as well (SetField is from ReflectionEx.cs). Remove it if you don't want native messages.
+
+    public static async Task DialogMsgAsync(string message, bool playSound)
+    {
+        TutorialText text = TutorialText.Instance;
+        if (!text) return;
+
+        LocalizedString localizedString = ScriptableObject.CreateInstance<LocalizedString>();
+        if (!localizedString) return;
+        localizedString.SetField("_englishText", message);
+
+        TutorialPrompt prompt = new();
+        if (!prompt) return;
+        prompt.Text = localizedString;
+        prompt.PlaySound = playSound;
+
+        text.SetPrompt(prompt);
+        await Task.Delay(2000);
+        text.ClearPrompt();
+    }
+
+    //Anger Foot doesn't directly report conversation state, so we track it in Harmony\PlayerControlMode.cs and update it here
+    //Flags like this can be added or removed as needed for your game
+    public bool IsActiveInConversation { get; set; }
+
+    */
+
     /// <summary>
     /// True to report <see cref="ConnectorLib.JSON.GameState.NotFocused"/> (blocking effects) while the game
     /// window is not in the foreground, false to ignore focus entirely.
@@ -76,6 +106,27 @@ public class GameStateManager
 
             // A menu, dialog, or other UI screen is open over the game
             if (UIManager.Instance.anyMenuOpen)
+                return ConnectorLib.JSON.GameState.Paused;
+
+            */
+
+            /* == EXAMPLE (Anger Foot) - the same checks against a real game's APIs ==
+             * IsActiveInConversation is fed by the Harmony patch in Harmony\PlayerControlMode.cs.
+
+            GameConfig config = GameConfig.Instance;
+            if (!config || !config.GetCurrentLevel())
+                return ConnectorLib.JSON.GameState.WrongMode; //title screen or non-gameplay scene
+
+            if (!config.IsLevelGameplayLevel(config.GetCurrentLevel()))
+                return ConnectorLib.JSON.GameState.SafeArea; //hub or other non-gameplay level
+
+            if (IsActiveInConversation)
+                return ConnectorLib.JSON.GameState.Cutscene; //talking to an NPC
+
+            if (SingletonBehaviour<GameplayManager>.Instance.CurrentLevelStats.LevelTime < 1.0)
+                return ConnectorLib.JSON.GameState.BadPlayerState; //level just started or player just respawned
+
+            if (GameState.IsGamePausedOrNotFocused)
                 return ConnectorLib.JSON.GameState.Paused;
 
             */

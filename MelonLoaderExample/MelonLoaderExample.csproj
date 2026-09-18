@@ -81,10 +81,6 @@
         <ProjectReference Include="..\ConnectorLib.JSON\ConnectorLib.JSON.csproj"/>
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Harmony\" />
-    </ItemGroup>
-
     <PropertyGroup>
         <LangVersion>10.0</LangVersion>
         <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
